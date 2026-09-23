@@ -1,0 +1,50 @@
+{
+  "name": "@cloudflare/voice-gradium",
+  "version": "0.0.1",
+  "description": "Gradium STT and TTS providers for the Cloudflare Agents voice pipeline",
+  "repository": {
+    "directory": "voice-providers/gradium",
+    "type": "git",
+    "url": "git+https://github.com/cloudflare/agents.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cloudflare/agents/issues"
+  },
+  "peerDependencies": {
+    "agents": ">=0.23.0 <2.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsx ./scripts/build.ts",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "cloudflare",
+    "agents",
+    "voice",
+    "stt",
+    "tts",
+    "gradium",
+    "text-to-speech",
+    "speech-to-text"
+  ],
+  "author": "Cloudflare Inc.",
+  "license": "MIT",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "agents": "workspace:*"
+  }
+}

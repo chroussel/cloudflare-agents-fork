@@ -517,6 +517,7 @@ tts = new WorkersAITTS(this.env.AI, {
 | `@cloudflare/voice-assemblyai` | `AssemblyAISTT`                  | Continuous STT (Universal 3.5 Pro Realtime) |
 | `@cloudflare/voice-deepgram`   | `DeepgramSTT`                    | Continuous STT                              |
 | `@cloudflare/voice-elevenlabs` | `ElevenLabsSTT`, `ElevenLabsTTS` | Continuous STT and high-quality TTS         |
+| `@cloudflare/voice-gradium`    | `GradiumSTT`, `GradiumTTS`       | Continuous STT (semantic VAD) and TTS       |
 | `@cloudflare/voice-telnyx`     | `TelnyxSTT`, `TelnyxTTS`         | Continuous STT, TTS, and phone transport    |
 | `@cloudflare/voice-twilio`     | Twilio adapter                   | Telephony (phone calls)                     |
 
@@ -562,6 +563,26 @@ export class MyAgent extends VoiceAgent<Env> {
   });
 }
 ```
+
+**Gradium STT and TTS:**
+
+```typescript
+import { GradiumSTT, GradiumTTS } from "@cloudflare/voice-gradium";
+
+// Gradium TTS output is native 48 kHz PCM.
+const VoiceAgent = withVoice(Agent, {
+  audioFormat: "pcm16",
+  sampleRate: 48_000
+});
+
+export class MyAgent extends VoiceAgent<Env> {
+  transcriber = new GradiumSTT({ apiKey: this.env.GRADIUM_API_KEY });
+  tts = new GradiumTTS({ apiKey: this.env.GRADIUM_API_KEY });
+}
+```
+
+`GradiumSTT` uses Gradium's semantic VAD to detect turn boundaries and emits one
+stable utterance per turn. See the [package README](https://github.com/cloudflare/agents/tree/main/voice-providers/gradium) for the full options table.
 
 **Deepgram STT:**
 
