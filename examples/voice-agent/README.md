@@ -4,9 +4,9 @@ A real-time voice agent running entirely inside a Durable Object. Talk to an AI 
 
 Uses Workers AI by default, so it runs with zero external API keys. The STT
 provider selector can also route the same voice pipeline through AssemblyAI,
-Telnyx, or ElevenLabs when their API keys are configured:
+Telnyx, ElevenLabs, or Gradium when their API keys are configured:
 
-- **STT**: Workers AI Flux (`@cf/deepgram/flux`) by default, Workers AI Nova 3 (`@cf/deepgram/nova-3`), AssemblyAI Universal 3.5 Pro Realtime, Telnyx STT, or ElevenLabs Scribe v2 Realtime
+- **STT**: Workers AI Flux (`@cf/deepgram/flux`) by default, Workers AI Nova 3 (`@cf/deepgram/nova-3`), AssemblyAI Universal 3.5 Pro Realtime, Telnyx STT, ElevenLabs Scribe v2 Realtime, or Gradium
 - **TTS**: Deepgram Aura (`@cf/deepgram/aura-1`)
 - **Turn detection**: Flux `StartOfTurn` / `EndOfTurn` events
 - **LLM**: Kimi K2.7 Code (`@cf/moonshotai/kimi-k2.7-code`), GPT OSS 20B, or GLM 4.7 Flash
@@ -55,9 +55,9 @@ Browser                          Durable Object (VoiceAgent)
 
 - **Streaming TTS** — LLM output is split into sentences and synthesized concurrently, so the user hears the first sentence while the rest is still being generated.
 - **Interruption handling** — speak over the agent to cut it off mid-sentence. Flux speech-start events abort the server pipeline and stop queued browser playback; client audio-level detection remains as a fallback.
-- **Provider selector** — choose Workers AI, AssemblyAI, Telnyx, or ElevenLabs STT without changing the agent code.
+- **Provider selector** — choose Workers AI, AssemblyAI, Telnyx, ElevenLabs, or Gradium STT without changing the agent code.
 - **Server-side turn detection** — the selected STT provider handles speech boundaries, so the example does not need client-side end-of-speech signaling to run the voice pipeline.
-- **Provider tuning** — Workers AI Flux and Nova-3 expose keyterms; AssemblyAI exposes latency/accuracy mode, Voice Focus, context prompt, and keyterms; Telnyx exposes model/language; ElevenLabs exposes Scribe cleanup, background filtering, and keyterms.
+- **Provider tuning** — Workers AI Flux and Nova-3 expose keyterms; AssemblyAI exposes latency/accuracy mode, Voice Focus, context prompt, and keyterms; Telnyx exposes model/language; ElevenLabs exposes Scribe cleanup, background filtering, and keyterms; Gradium exposes semantic VAD horizon, threshold, and barge-in sensitivity.
 - **Speaker selection** — choose an audio output device for assistant playback. Unsupported browsers keep using the system default output.
 - **Conversation persistence** — all messages are stored in SQLite and survive restarts. The agent remembers previous conversations.
 - **Agent tools** — the LLM can call `get_current_time`, `set_reminder`, and `get_weather` during conversation.

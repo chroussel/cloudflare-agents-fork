@@ -12,6 +12,7 @@
     "@cloudflare/kumo": "^2.6.0",
     "@cloudflare/voice-assemblyai": "*",
     "@cloudflare/voice-elevenlabs": "*",
+    "@cloudflare/voice-gradium": "*",
     "@cloudflare/voice-telnyx": "*",
     "@phosphor-icons/react": "^2.1.10",
     "agents": "*",

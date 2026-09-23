@@ -31,3 +31,9 @@ export function optionalBoolean(value: string | null): boolean | undefined {
   if (value === "false") return false;
   return undefined;
 }
+
+export function optionalNumber(value: string | null): number | undefined {
+  if (value === null) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}

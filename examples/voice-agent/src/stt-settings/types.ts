@@ -3,7 +3,8 @@ export type SttProvider =
   | "workers-ai-nova-3"
   | "assemblyai"
   | "telnyx"
-  | "elevenlabs";
+  | "elevenlabs"
+  | "gradium";
 export type AssemblyAIMode = "min_latency" | "balanced" | "max_accuracy";
 export type VoiceFocus = "off" | "near-field" | "far-field";
 export type TelnyxEngine = "Telnyx" | "Deepgram";
@@ -20,6 +21,9 @@ export interface SttSettings {
   language: string;
   elevenlabsNoVerbatim: boolean;
   elevenlabsFilterBackgroundAudio: boolean;
+  gradiumVadHorizonSeconds: number;
+  gradiumVadThreshold: number;
+  gradiumMinSpeechWords: number;
 }
 
 export type SettingsUpdate = (patch: Partial<SttSettings>) => void;

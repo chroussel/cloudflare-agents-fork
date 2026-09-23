@@ -3,4 +3,5 @@ export type SttProvider =
   | "workers-ai-nova-3"
   | "assemblyai"
   | "telnyx"
-  | "elevenlabs";
+  | "elevenlabs"
+  | "gradium";

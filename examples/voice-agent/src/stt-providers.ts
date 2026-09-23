@@ -2,6 +2,7 @@ import type { Transcriber } from "agents/voice";
 import type { Connection } from "agents";
 import { createAssemblyAITranscriber } from "./stt-providers/assemblyai";
 import { createElevenLabsTranscriber } from "./stt-providers/elevenlabs";
+import { createGradiumTranscriber } from "./stt-providers/gradium";
 import { createTelnyxTranscriber } from "./stt-providers/telnyx";
 import type { SttProvider } from "./stt-providers/types";
 import { getEnvString } from "./stt-providers/utils";
@@ -26,6 +27,10 @@ export function createVoiceTranscriber(
     return createElevenLabsTranscriber(env, url);
   }
 
+  if (provider === "gradium") {
+    return createGradiumTranscriber(env, url);
+  }
+
   return createWorkersAITranscriber(env, provider, url);
 }
 
@@ -43,6 +48,9 @@ export function getMissingSttProviderKey(
   if (provider === "elevenlabs" && !getEnvString(env, "ELEVENLABS_API_KEY")) {
     return "ElevenLabs STT requires ELEVENLABS_API_KEY in your .env file or Worker secrets.";
   }
+  if (provider === "gradium" && !getEnvString(env, "GRADIUM_API_KEY")) {
+    return "Gradium STT requires GRADIUM_API_KEY in your .env file or Worker secrets.";
+  }
   return null;
 }
 
@@ -58,7 +66,8 @@ function getSttProvider(connection: Connection): SttProvider {
     provider === "workers-ai-nova-3" ||
     provider === "assemblyai" ||
     provider === "telnyx" ||
-    provider === "elevenlabs"
+    provider === "elevenlabs" ||
+    provider === "gradium"
   ) {
     return provider;
   }

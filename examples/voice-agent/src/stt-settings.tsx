@@ -9,6 +9,7 @@ import {
   ElevenLabsSettings,
   getElevenLabsQuery
 } from "./stt-settings/elevenlabs";
+import { GradiumSettings, getGradiumQuery } from "./stt-settings/gradium";
 import { TelnyxSettings, getTelnyxQuery } from "./stt-settings/telnyx";
 import type { SttProvider, SttSettings } from "./stt-settings/types";
 import {
@@ -29,7 +30,10 @@ export const DEFAULT_STT_SETTINGS: SttSettings = {
   telnyxModel: "",
   language: "",
   elevenlabsNoVerbatim: false,
-  elevenlabsFilterBackgroundAudio: false
+  elevenlabsFilterBackgroundAudio: false,
+  gradiumVadHorizonSeconds: 2,
+  gradiumVadThreshold: 0.5,
+  gradiumMinSpeechWords: 2
 };
 
 export function getSttQuery(settings: SttSettings): Record<string, string> {
@@ -40,6 +44,8 @@ export function getSttQuery(settings: SttSettings): Record<string, string> {
       return getTelnyxQuery(settings);
     case "elevenlabs":
       return getElevenLabsQuery(settings);
+    case "gradium":
+      return getGradiumQuery(settings);
     case "workers-ai-flux":
     case "workers-ai-nova-3":
       return getWorkersAIQuery(settings);
@@ -76,6 +82,7 @@ export function ProviderSettings({
           <option value="assemblyai">AssemblyAI Universal 3.5 Pro</option>
           <option value="telnyx">Telnyx STT</option>
           <option value="elevenlabs">ElevenLabs Scribe v2 Realtime</option>
+          <option value="gradium">Gradium (semantic VAD)</option>
         </select>
       </div>
 
@@ -108,6 +115,13 @@ export function ProviderSettings({
           )}
           {settings.provider === "elevenlabs" && (
             <ElevenLabsSettings
+              settings={settings}
+              disabled={disabled}
+              update={update}
+            />
+          )}
+          {settings.provider === "gradium" && (
+            <GradiumSettings
               settings={settings}
               disabled={disabled}
               update={update}
