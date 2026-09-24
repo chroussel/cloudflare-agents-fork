@@ -25,6 +25,50 @@ it("defaults the STT language to automatic detection", async () => {
   });
 });
 
+it("overrides the STT language per session without changing provider defaults", async () => {
+  const provider = new GradiumSTT({
+    apiKey: "test-key",
+    language: "en",
+    jsonConfig: { language: "de" }
+  });
+  const { socket: frenchSocket } = connectWith();
+  const french = provider.createSession({ language: "fr" });
+  await flush();
+  expect(sentMessages(frenchSocket)[0]).toMatchObject({
+    json_config: { language: "fr" }
+  });
+
+  const { socket: defaultSocket } = connectWith();
+  const defaultSession = provider.createSession();
+  await flush();
+  expect(sentMessages(defaultSocket)[0]).toMatchObject({
+    json_config: { language: "en" }
+  });
+  french.close();
+  defaultSession.close();
+});
+
+it.each([
+  { language: "fr", expected: "fr" },
+  { language: undefined, expected: "de" }
+])(
+  "resolves JSON language with session language $language",
+  async ({ language, expected }) => {
+    const { socket } = connectWith();
+    const jsonConfig = { language: "de" };
+    const session = new GradiumSTT({
+      apiKey: "test-key",
+      jsonConfig
+    }).createSession({ language });
+    await flush();
+    expect(sentMessages(socket)[0]).toMatchObject({
+      json_config: { language: expected }
+    });
+    expect(jsonConfig.language).toBe("de");
+    session.close();
+  }
+);
+
 it("sends STT setup and holds audio until Gradium is ready", async () => {
   const { socket } = connectWith();
   const session = new GradiumSTT({

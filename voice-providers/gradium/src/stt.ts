@@ -249,7 +249,10 @@ class GradiumSTTSession implements TranscriberSession {
     const config = { ...this.#providerOptions.jsonConfig };
     // Gradium requires a language to start an ASR session.
     config.language =
-      this.#providerOptions.language ?? config.language ?? DEFAULT_STT_LANGUAGE;
+      this.#sessionOptions?.language ??
+      this.#providerOptions.language ??
+      config.language ??
+      DEFAULT_STT_LANGUAGE;
     if (this.#providerOptions.temperature !== undefined) {
       config.temp = this.#providerOptions.temperature;
     }

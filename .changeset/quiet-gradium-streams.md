@@ -17,3 +17,6 @@ listeners before socket acceptance, abort pending upgrades on close, and make
 provider/socket/send failures terminal before notifying the caller. Release
 buffered audio and listeners on termination, and reject readiness if startup
 audio cannot be sent.
+
+Honor per-session STT language overrides before the provider language,
+`jsonConfig.language`, and automatic detection defaults.
