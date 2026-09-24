@@ -1,134 +1,17 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { GradiumSTT, GradiumTTS } from "../src/index";
-
-class MockWebSocket extends EventTarget {
-  accept = vi.fn();
-  send = vi.fn();
-  close = vi.fn();
-}
-
-const flush = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-
-function connectWith(socket = new MockWebSocket()) {
-  const fetchMock = vi.fn(
-    async () => ({ webSocket: socket, status: 101 }) as unknown as Response
-  );
-  vi.stubGlobal("fetch", fetchMock);
-  return { fetchMock, socket };
-}
-
-function message(socket: MockWebSocket, data: Record<string, unknown>) {
-  socket.dispatchEvent(
-    new MessageEvent("message", { data: JSON.stringify(data) })
-  );
-}
-
-function sentMessages(socket: MockWebSocket): Array<Record<string, unknown>> {
-  return socket.send.mock.calls.map(([value]) => JSON.parse(String(value)));
-}
-
-function closeSocket(socket: MockWebSocket, code = 1006, reason = "") {
-  const event = new Event("close");
-  Object.assign(event, { code, reason });
-  socket.dispatchEvent(event);
-}
+import { GradiumSTT } from "../src/index";
+import {
+  MockWebSocket,
+  closeSocket,
+  connectWith,
+  flush,
+  message,
+  sentMessages
+} from "./helpers";
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-});
-
-it("streams Gradium TTS audio after the ready message", async () => {
-  const { fetchMock, socket } = connectWith();
-  const tts = new GradiumTTS({
-    apiKey: "test-key",
-    voiceId: "voice-123"
-  });
-  const iterator = tts.synthesizeStream("Hello world");
-  const firstChunk = iterator.next();
-  await flush();
-
-  expect(fetchMock).toHaveBeenCalledWith(
-    "https://api.gradium.ai/api/speech/tts",
-    expect.objectContaining({
-      headers: { Upgrade: "websocket", "x-api-key": "test-key" }
-    })
-  );
-  expect(sentMessages(socket)[0]).toEqual({
-    type: "setup",
-    model_name: "default",
-    voice_id: "voice-123",
-    output_format: "pcm",
-    json_config: {}
-  });
-
-  message(socket, { type: "ready" });
-  await flush();
-  expect(sentMessages(socket).slice(1)).toEqual([
-    { type: "text", text: "Hello world" },
-    { type: "end_of_stream" }
-  ]);
-
-  message(socket, {
-    type: "audio",
-    audio: btoa(String.fromCharCode(1, 2, 3, 4))
-  });
-  expect(new Uint8Array((await firstChunk).value)).toEqual(
-    new Uint8Array([1, 2, 3, 4])
-  );
-
-  const done = iterator.next();
-  message(socket, { type: "end_of_stream" });
-  await expect(done).resolves.toEqual({ done: true, value: undefined });
-  expect(socket.close).toHaveBeenCalled();
-});
-
-it("ignores word-timestamp messages in the TTS audio stream", async () => {
-  const { socket } = connectWith();
-  const tts = new GradiumTTS({ apiKey: "test-key" });
-  const iterator = tts.synthesizeStream("Hello world");
-  const first = iterator.next();
-  await flush();
-  message(socket, { type: "ready" });
-  await flush();
-
-  // Gradium interleaves word-aligned text with audio; only audio is yielded.
-  message(socket, { type: "text", text: "Hello", start_s: 0.24, stop_s: 0.48 });
-  message(socket, { type: "audio", audio: btoa("ab") });
-  expect(new TextDecoder().decode((await first).value)).toBe("ab");
-
-  const done = iterator.next();
-  message(socket, { type: "end_of_stream" });
-  await expect(done).resolves.toEqual({ done: true, value: undefined });
-});
-
-it("fails the TTS stream when the socket closes before end_of_stream", async () => {
-  const { socket } = connectWith();
-  const tts = new GradiumTTS({ apiKey: "test-key" });
-  const iterator = tts.synthesizeStream("Hello");
-  const first = iterator.next();
-  await flush();
-
-  message(socket, { type: "ready" });
-  closeSocket(socket, 1008, "invalid api key");
-
-  await expect(first).rejects.toThrow(
-    "GradiumTTS: WebSocket closed before end_of_stream."
-  );
-});
-
-it("combines streamed TTS chunks for synthesize", async () => {
-  const { socket } = connectWith();
-  const tts = new GradiumTTS({ apiKey: "test-key" });
-  const audio = tts.synthesize("Hello");
-  await flush();
-
-  message(socket, { type: "ready" });
-  message(socket, { type: "audio", audio: btoa("ab") });
-  message(socket, { type: "audio", audio: btoa("cd") });
-  message(socket, { type: "end_of_stream" });
-
-  expect(new TextDecoder().decode((await audio) ?? undefined)).toBe("abcd");
 });
 
 it("defaults the STT language to automatic detection", async () => {
@@ -411,4 +294,256 @@ it("converts a local ws URL for the WebSocket fetch upgrade", async () => {
   );
   message(socket, { type: "ready" });
   session.close();
+});
+
+it("handles STT errors emitted during socket acceptance", async () => {
+  const { socket } = connectWith();
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  socket.accept.mockImplementation(() => message(socket, { type: "error" }));
+  const onFatalError = vi.fn();
+  const session = new GradiumSTT({ apiKey: "test-key" }).createSession({
+    onFatalError
+  });
+
+  await expect(session.waitUntilReady?.()).rejects.toThrow(
+    "Gradium STT server error"
+  );
+  expect(onFatalError).toHaveBeenCalledTimes(1);
+  expect(socket.send).not.toHaveBeenCalled();
+  expect(socket.close).toHaveBeenCalledTimes(1);
+});
+
+it("releases STT resources when socket acceptance fails", async () => {
+  const { socket } = connectWith();
+  const remove = vi.spyOn(socket, "removeEventListener");
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  socket.accept.mockImplementation(() => {
+    throw new Error("accept failed");
+  });
+  const onFatalError = vi.fn();
+  const session = new GradiumSTT({ apiKey: "test-key" }).createSession({
+    onFatalError
+  });
+
+  await expect(session.waitUntilReady?.()).rejects.toThrow("accept failed");
+  expect(onFatalError).toHaveBeenCalledTimes(1);
+  expect(socket.close).toHaveBeenCalledTimes(1);
+  expect(remove.mock.calls.map(([type]) => type).sort()).toEqual([
+    "close",
+    "error",
+    "message"
+  ]);
+});
+
+it("makes an STT provider failure terminal before notifying the caller", async () => {
+  const { socket } = connectWith();
+  const remove = vi.spyOn(socket, "removeEventListener");
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const onInterim = vi.fn();
+  const onUtterance = vi.fn();
+  const onFatalError = vi.fn(() => {
+    expect(socket.close).toHaveBeenCalledTimes(1);
+    session.feed(new ArrayBuffer(2));
+    session.close();
+  });
+  const session = new GradiumSTT({ apiKey: "test-key" }).createSession({
+    onInterim,
+    onUtterance,
+    onFatalError
+  });
+  await flush();
+  message(socket, { type: "ready" });
+  await session.waitUntilReady?.();
+  message(socket, { type: "text", text: "unfinished" });
+  const sendsBeforeFailure = socket.send.mock.calls.length;
+  message(socket, { type: "error" });
+  message(socket, { type: "text", text: "late" });
+  message(socket, { type: "end_of_stream" });
+  socket.dispatchEvent(new Event("error"));
+  closeSocket(socket);
+
+  expect(onFatalError).toHaveBeenCalledTimes(1);
+  expect(onInterim).toHaveBeenCalledTimes(1);
+  expect(onUtterance).not.toHaveBeenCalled();
+  expect(socket.send).toHaveBeenCalledTimes(sendsBeforeFailure);
+  expect(remove.mock.calls.map(([type]) => type).sort()).toEqual([
+    "close",
+    "error",
+    "message"
+  ]);
+});
+
+it("rejects STT readiness when sending setup fails", async () => {
+  const { socket } = connectWith();
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  socket.send.mockImplementation(() => {
+    throw new Error("setup failed");
+  });
+  const onFatalError = vi.fn();
+  const session = new GradiumSTT({ apiKey: "test-key" }).createSession({
+    onFatalError
+  });
+
+  await expect(session.waitUntilReady?.()).rejects.toThrow("setup failed");
+  expect(onFatalError).toHaveBeenCalledTimes(1);
+  expect(socket.close).toHaveBeenCalledTimes(1);
+});
+
+it("rejects STT readiness and stops draining buffered audio if a send fails", async () => {
+  const { socket } = connectWith();
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const onFatalError = vi.fn();
+  const session = new GradiumSTT({ apiKey: "test-key" }).createSession({
+    onFatalError
+  });
+  session.feed(new ArrayBuffer(2));
+  session.feed(new ArrayBuffer(2));
+  const readiness = expect(session.waitUntilReady?.()).rejects.toThrow(
+    "audio failed"
+  );
+  await flush();
+  socket.send.mockImplementation(() => {
+    throw new Error("audio failed");
+  });
+  message(socket, { type: "ready" });
+  await readiness;
+
+  expect(socket.send).toHaveBeenCalledTimes(2); // setup + first buffered chunk
+  expect(onFatalError).toHaveBeenCalledTimes(1);
+  expect(socket.close).toHaveBeenCalledTimes(1);
+});
+
+it.each(["audio", "flush"])(
+  "treats a failed STT %s send as terminal",
+  async (kind) => {
+    const { socket } = connectWith();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const onFatalError = vi.fn();
+    const session = new GradiumSTT({ apiKey: "test-key" }).createSession({
+      onFatalError
+    });
+    await flush();
+    message(socket, { type: "ready" });
+    await session.waitUntilReady?.();
+    socket.send.mockImplementation(() => {
+      throw new Error("send failed");
+    });
+    if (kind === "audio") {
+      expect(() => session.feed(new ArrayBuffer(2))).not.toThrow();
+    } else {
+      message(socket, { type: "text", text: "hello" });
+      message(socket, {
+        type: "vad",
+        vad: [{ horizon_s: 2, inactivity_prob: 0.9 }]
+      });
+    }
+    session.feed(new ArrayBuffer(2));
+    expect(onFatalError).toHaveBeenCalledTimes(1);
+    expect(socket.send).toHaveBeenCalledTimes(2);
+    expect(socket.close).toHaveBeenCalledTimes(1);
+  }
+);
+
+it("aborts an in-flight STT upgrade on close without reporting a failure", async () => {
+  let upgradeSignal: AbortSignal | undefined;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((_url: string, init: RequestInit) => {
+      upgradeSignal = init.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) => {
+        upgradeSignal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("Aborted", "AbortError")),
+          { once: true }
+        );
+      });
+    })
+  );
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+  const onFatalError = vi.fn();
+  const session = new GradiumSTT({ apiKey: "test-key" }).createSession({
+    onFatalError
+  });
+  const readiness = expect(session.waitUntilReady?.()).rejects.toThrow(
+    "closed before session start"
+  );
+  session.close();
+  await readiness;
+  await flush();
+
+  expect(upgradeSignal?.aborted).toBe(true);
+  expect(onFatalError).not.toHaveBeenCalled();
+  expect(errorLog).not.toHaveBeenCalled();
+});
+
+it("closes a late STT upgrade without sending setup or buffered audio", async () => {
+  const socket = new MockWebSocket();
+  let resolveFetch!: (response: Response) => void;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve;
+        })
+    )
+  );
+  const onFatalError = vi.fn();
+  const session = new GradiumSTT({ apiKey: "test-key" }).createSession({
+    onFatalError
+  });
+  session.feed(new ArrayBuffer(2));
+  const readiness = expect(session.waitUntilReady?.()).rejects.toThrow(
+    "closed before session start"
+  );
+  session.close();
+  resolveFetch({ webSocket: socket, status: 101 } as unknown as Response);
+  await readiness;
+  await flush();
+
+  expect(socket.accept).toHaveBeenCalledTimes(1);
+  expect(socket.close).toHaveBeenCalledTimes(1);
+  expect(socket.send).not.toHaveBeenCalled();
+  expect(onFatalError).not.toHaveBeenCalled();
+});
+
+it("keeps STT close idempotent when both teardown send and socket close throw", async () => {
+  const { socket } = connectWith();
+  const onFatalError = vi.fn();
+  const onInterim = vi.fn();
+  const session = new GradiumSTT({ apiKey: "test-key" }).createSession({
+    onFatalError,
+    onInterim
+  });
+  await flush();
+  message(socket, { type: "ready" });
+  await session.waitUntilReady?.();
+  socket.send.mockImplementation(() => {
+    throw new Error("send failed");
+  });
+  socket.close.mockImplementation(() => {
+    throw new Error("close failed");
+  });
+
+  expect(() => session.close()).not.toThrow();
+  expect(() => session.close()).not.toThrow();
+  message(socket, { type: "text", text: "late" });
+  expect(onInterim).not.toHaveBeenCalled();
+  expect(onFatalError).not.toHaveBeenCalled();
+  expect(socket.send).toHaveBeenCalledTimes(2);
+  expect(socket.close).toHaveBeenCalledTimes(1);
+});
+
+it("does not emit an interim transcript after onSpeechStart closes STT", async () => {
+  const { socket } = connectWith();
+  const onInterim = vi.fn();
+  const session = new GradiumSTT({ apiKey: "test-key" }).createSession({
+    onSpeechStart: () => session.close(),
+    onInterim
+  });
+  await flush();
+  message(socket, { type: "ready" });
+  message(socket, { type: "text", text: "hello world" });
+  expect(onInterim).not.toHaveBeenCalled();
+  expect(socket.close).toHaveBeenCalledTimes(1);
 });
